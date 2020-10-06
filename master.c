@@ -2,7 +2,7 @@
 //Program Name: master
 //Author: Cory Mckiel
 //Date Created: Oct 4, 2020
-//Last Modified: Oct 5, 2020
+//Last Modified: Oct 6, 2020
 //Program Description:
 //      Assignment two for operating systems class 4760
 //      during fall20 semester.
@@ -21,6 +21,7 @@
 //*****************************************************
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,28 +67,34 @@ int main(int argc, char *argv[])
         }
     }
 
+    //Max concurrent children must not exceed 20.
     if ( max_concurrent_children < 1 || max_concurrent_children > 20 ) {
         fprintf(stderr, "%s: Error: s must satisfy 1 <= s <= 20.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //Max lifetime children must be at least one.
     if ( max_lifetime_children < 1 ) {
         fprintf(stderr, "%s: Error: n must be at least 1.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //Max run time must be at least one second.
     if ( max_run_time < 1 ) {
         fprintf(stderr, "%s: Error: t must be at least 1.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //if true, there is an additional nonoption argument.
     if ( optind < argc ) {
+        //copy it to file as the file name to work with.
         strncpy(file, argv[optind], 50);
     } else {
         fprintf(stderr, "%s: Error: There must be a file name.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //Test prints.
     printf("s: %d\n", max_concurrent_children);
     printf("n: %d\n", max_lifetime_children);
     printf("t: %d\n", max_run_time);
@@ -97,27 +104,32 @@ int main(int argc, char *argv[])
 //*****************************************************
 //BEGIN: Setting up shared memory.
 
-key_t key;
-int shmid;
-int *shmp;
+    key_t key;
+    int shmid;
+    int *shmp;
 
+    //Generate key deterministically so that children
+    //can do the same and attach to shared memory.
     if ( (key = ftok("./", 876)) == -1 ) {
         fprintf(stderr, "%s: Error: ftok() failed to generated key.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //Create and get the id of the shared memory segment.
     if ( (shmid = shmget(key, sizeof(int), IPC_CREAT|0666)) < 0 ) {
         fprintf(stderr, "%s: Error: Failed to allocate shared memory.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //Attach to shared memory.
     if ( (shmp = (int*)shmat(shmid, NULL, 0)) < 0 ) {
         fprintf(stderr, "%s: Error: Failed to attach to shared memory.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //test assignment.
     *shmp = 5;
-
+    //test print.
     printf("shmp: %d\n", *shmp);
 
 //END: Setting up shared memory.
@@ -125,6 +137,7 @@ int *shmp;
 //BEGIN: Creating children.
 
     pid_t childpid;
+    //Test argv for palin.
     char *arg_vector[] = {"./palin", "helloolleh", NULL};
 
     if ( (childpid = fork()) < 0 ) {
@@ -134,8 +147,14 @@ int *shmp;
         execv(arg_vector[0], arg_vector);
     }
 
+//END: Creating children.
+//*****************************************************
+//BEGIN: Finishing up.
+
+    //wait for all children.
     while ( wait(NULL) > 0 );
 
+    //Clean up shared memory.
     shmdt(shmp);
     shmctl(shmid, IPC_RMID, 0);
 

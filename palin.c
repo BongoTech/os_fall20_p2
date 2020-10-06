@@ -2,7 +2,7 @@
 //Program Name: palin
 //Author: Cory Mckiel
 //Date Created: Oct 4, 2020
-//Last Modified: Oct 5, 2020
+//Last Modified: Oct 6, 2020
 //Program Description:
 //      Assignment two for fall20 class 4760 at UMSL.
 //
@@ -22,15 +22,23 @@
 #include <sys/shm.h>
 #include <sys/types.h>
 
-int strrev(char*);
+int is_palindrome(char*);
 
 int main(int argc, char *argv[])
 {
+
+//*****************************************************
+//BEGIN: Command line processing.
+    
     //Current version takes the palindrome by cmd ln.
     if (argc != 2) {
         fprintf(stderr, "%s: Error: Enter a string as argument.\n", argv[0]);
         return 1;
     }
+
+//END: Command line processing.
+//*****************************************************
+//BEGIN: Attaching to shared memory.
 
     key_t key;
     int shmid;
@@ -52,22 +60,24 @@ int main(int argc, char *argv[])
     }
 
     printf("child: shmp: %d\n", *shmp);
-    shmdt(shmp);
-    
-    //Make a copy of cmd ln string in temp.
-    char temp[50];
-    strncpy(temp, argv[1], 49);
-    
-    //Reverse temp.
-    strrev(temp);
+
+//END: Attaching to shared memory.
+//*****************************************************
+//BEGIN: Determine if palindrome.
 
     //If the standard and reversed versions are
     //the same, it is a palindrome.
-    if (strncmp(temp, argv[1], 49) == 0) {
+    if (is_palindrome(argv[1])) {
         printf("true.\n");
     } else {
         printf("false.\n");
     }
+
+//END: Determine if palindrome.
+//*****************************************************
+//BEGIN: Finishing up.
+
+    shmdt(shmp);
 
     return 0;
 }
@@ -96,4 +106,22 @@ int strrev(char *str)
     strncpy(str, temp, length);
 
    return 0;
+}
+
+int is_palindrome(char *str)
+{
+    //Make a copy of cmd ln string in temp.
+    char temp[50];
+    strncpy(temp, str, 49);
+    
+    //Reverse temp.
+    strrev(temp);
+
+    //If the standard and reversed versions are
+    //the same, it is a palindrome.
+    if (strncmp(temp, str, 49) == 0) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
