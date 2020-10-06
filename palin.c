@@ -15,8 +15,12 @@
 //          Type: gcc -Wall -g palin.c -o palin
 //*****************************************************
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
 
 int strrev(char*);
 
@@ -28,6 +32,28 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    key_t key;
+    int shmid;
+    int *shmp;
+
+    if ( (key = ftok("./", 876)) == -1 ) {
+        fprintf(stderr, "%s: Error: ftok() failed to generated key.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    if ( (shmid = shmget(key, sizeof(int), 0666)) < 0 ) {
+        fprintf(stderr, "%s: Error: Failed to allocate shared memory.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    if ( (shmp = (int*)shmat(shmid, NULL, 0)) < 0 ) {
+        fprintf(stderr, "%s: Error: Failed to attach to shared memory.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    printf("child: shmp: %d\n", *shmp);
+    shmdt(shmp);
+    
     //Make a copy of cmd ln string in temp.
     char temp[50];
     strncpy(temp, argv[1], 49);
