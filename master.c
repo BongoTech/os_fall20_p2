@@ -120,9 +120,24 @@ int *shmp;
 
     printf("shmp: %d\n", *shmp);
 
+//END: Setting up shared memory.
+//*****************************************************
+//BEGIN: Creating children.
+
+    pid_t childpid;
+    char *arg_vector[] = {"./palin", "helloolleh", NULL};
+
+    if ( (childpid = fork()) < 0 ) {
+        fprintf(stderr, "%s: Error: fork() failed to create child.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    } else if ( childpid == 0 ) {
+        execv(arg_vector[0], arg_vector);
+    }
+
+    while ( wait(NULL) > 0 );
+
     shmdt(shmp);
     shmctl(shmid, IPC_RMID, 0);
-
 
     return 0;
 }
