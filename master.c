@@ -28,11 +28,50 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 int help(char*);
 
+//Volatile flag so that compiler knows to check
+//every time rather than optimize. sig_atomic_t to ensure
+//it only gets changed by one thing at a time.
+static volatile sig_atomic_t done_flag = 0;
+
+//Sets a flag to indicate when program should exit gracefully.
+static int setdoneflag(int s)
+{
+    done_flag = 1;
+    return 0;
+}
+
+//Set the signal handler for the interrupt.
+static int setupinterrupt()
+{
+    struct sigaction act;
+    act.sa_handler = setdoneflag;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGPROF, &act, NULL));
+}
+
+//Set up the interrupt timer for the time specified.
+static int setuptimer(int time)
+{
+    struct itimerval value;
+    if ( time <= 1000 ) {
+        value.it_interval.tv_sec = time;
+        value.it_interval.tv_usec = 0;
+    } else {
+        return -1;
+    }
+    value.it_value = value.it_interval;
+    return (setitimer(ITIMER_PROF, &value, NULL));
+}
+
+//*****************************************************
+//MAIN
+//*****************************************************
 int main(int argc, char *argv[])
 {
     int max_lifetime_children = 4;
@@ -41,8 +80,9 @@ int main(int argc, char *argv[])
     //FILE *fp = NULL;
     char file[51];
 
-//BEGIN: Command line processing.
 //*****************************************************
+//BEGIN: Command line processing.
+
     int option;
     while ( (option = getopt(argc, argv, ":n:s:t:h")) != -1 ) {
         switch ( option ) {
@@ -102,6 +142,20 @@ int main(int argc, char *argv[])
 
 //END: Command line processing.
 //*****************************************************
+//BEGIN: Interrupt setup.
+
+    if ( setupinterrupt() == -1 ) {
+        fprintf(stderr, "%s: Error: Failed to set up interrupt.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    if ( setuptimer(max_run_time) == -1 ) {
+        fprintf(stderr, "%s: Error: Failed to set up timer.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+//END: Interrupt setup.
+//*****************************************************
 //BEGIN: Setting up shared memory.
 
     key_t key;
@@ -150,6 +204,15 @@ int main(int argc, char *argv[])
 //END: Creating children.
 //*****************************************************
 //BEGIN: Finishing up.
+
+    while(1) {
+        //Do the program stuff.
+        if (done_flag) {
+            break;
+        }
+    }
+
+    kill(childpid, SIGINT);
 
     //wait for all children.
     while ( wait(NULL) > 0 );

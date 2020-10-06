@@ -77,6 +77,8 @@ int main(int argc, char *argv[])
 //*****************************************************
 //BEGIN: Finishing up.
 
+    while(1);
+
     shmdt(shmp);
 
     return 0;
