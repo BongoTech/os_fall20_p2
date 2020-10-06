@@ -24,6 +24,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -86,15 +89,40 @@ int main(int argc, char *argv[])
     }
 
     printf("s: %d\n", max_concurrent_children);
-
     printf("n: %d\n", max_lifetime_children);
-
     printf("t: %d\n", max_run_time);
-
     printf("file: %s\n", file);
 
 //END: Command line processing.
 //*****************************************************
+//BEGIN: Setting up shared memory.
+
+key_t key;
+int shmid;
+int *shmp;
+
+    if ( (key = ftok("./", 876)) == -1 ) {
+        fprintf(stderr, "%s: Error: ftok() failed to generated key.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    if ( (shmid = shmget(key, sizeof(int), IPC_CREAT|0666)) < 0 ) {
+        fprintf(stderr, "%s: Error: Failed to allocate shared memory.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    if ( (shmp = (int*)shmat(shmid, NULL, 0)) < 0 ) {
+        fprintf(stderr, "%s: Error: Failed to attach to shared memory.\n%s\n", argv[0], strerror(errno));
+        return 1;
+    }
+
+    *shmp = 5;
+
+    printf("shmp: %d\n", *shmp);
+
+    shmdt(shmp);
+    shmctl(shmid, IPC_RMID, 0);
+
 
     return 0;
 }
