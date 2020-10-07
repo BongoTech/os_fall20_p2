@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
     int max_lifetime_children = 4;
     int max_concurrent_children = 2;
     int max_run_time = 100;
-    //FILE *fp = NULL;
+    FILE *fp = NULL;
     char file[51];
 
 //*****************************************************
@@ -134,6 +134,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    fp = fopen(file, "r");
+    
     //Test prints.
     printf("s: %d\n", max_concurrent_children);
     printf("n: %d\n", max_lifetime_children);
@@ -190,29 +192,60 @@ int main(int argc, char *argv[])
 //*****************************************************
 //BEGIN: Creating children.
 
-    pid_t childpid;
-    //Test argv for palin.
+    pid_t childpid[max_lifetime_children];
+    int child_count = 0;
+    int child_count_total = 0;
+    int there_is_input = 1;
+    char buffer[64];
     char *arg_vector[] = {"./palin", "helloolleh", NULL};
 
-    if ( (childpid = fork()) < 0 ) {
-        fprintf(stderr, "%s: Error: fork() failed to create child.\n%s\n", argv[0], strerror(errno));
-        return 1;
-    } else if ( childpid == 0 ) {
-        execv(arg_vector[0], arg_vector);
-    }
+    do {
+        //If the timer is up, break.
+        if ( done_flag ) {
+            break;
+        }
+
+        //If there are less children right now than the
+        //simultaneous max,
+        if ( child_count < max_concurrent_children ) {
+            if ( fgets(buffer, 63, fp) != NULL ) {        
+                //Create a child.
+                if ( (childpid[child_count_total] = fork()) < 0 ) {
+                    fprintf(stderr, "%s: Error: fork() failed to create child.\n%s\n", argv[0], strerror(errno));
+                    return 1;
+                } else if ( childpid[child_count_total] == 0 ) {
+                    execv(arg_vector[0], arg_vector);
+                } else {
+                    //increment the current count.
+                    child_count++;
+                    //increment the total count.
+                    child_count_total++;
+                }
+            } else {
+                there_is_input = 0;
+            }
+        }
+
+        //See if a child finished.
+        if ( waitpid(-1, NULL, WNOHANG) > 0 ) {
+            child_count--;
+        }
+
+    } while ( there_is_input && (child_count_total < max_lifetime_children) );
 
 //END: Creating children.
 //*****************************************************
 //BEGIN: Finishing up.
 
-    while(1) {
-        //Do the program stuff.
-        if (done_flag) {
-            break;
+    //printf("done: %d\n", done_flag);
+
+    //If the done flag was set, kill the children.
+    if ( done_flag ) {
+        int i;
+        for ( i = 0; i < child_count_total; i++ ) {
+            kill(childpid[i], SIGINT);
         }
     }
-
-    kill(childpid, SIGINT);
 
     //wait for all children.
     while ( wait(NULL) > 0 );
@@ -220,6 +253,10 @@ int main(int argc, char *argv[])
     //Clean up shared memory.
     shmdt(shmp);
     shmctl(shmid, IPC_RMID, 0);
+    
+    //Close file.
+    fclose(fp);
+    fp = NULL;
 
     return 0;
 }

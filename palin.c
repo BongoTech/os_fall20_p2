@@ -21,6 +21,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 int is_palindrome(char*);
 
@@ -77,7 +78,9 @@ int main(int argc, char *argv[])
 //*****************************************************
 //BEGIN: Finishing up.
 
-    while(1);
+    //while(1);
+
+    //sleep(6);
 
     shmdt(shmp);
 
