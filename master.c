@@ -2,16 +2,19 @@
 //Program Name: master
 //Author: Cory Mckiel
 //Date Created: Oct 4, 2020
-//Last Modified: Oct 6, 2020
+//Last Modified: Oct 7, 2020
 //Program Description:
 //      Assignment two for operating systems class 4760
 //      during fall20 semester.
 //
-//      master launches a child (palin) for each string
+//      master launches children (palin) for each string
 //      in a file to determine if it is a palindrome.
-//      Once determined the result will be stored in a
-//      file. master is responsible for processing the 
-//      command arguments and keeping track of the
+//      Once determined all palindromes will be stored
+//      in palin.out. All non palindromes will be stored
+//      in nopalin.out. log.out will contain all of the
+//      children created and their associated strings.
+//      master is responsible for processing the 
+//      command line arguments and keeping track of the
 //      children.
 //Compilation Instructions:
 //      Option 1: Using the supplied Makefile.
@@ -32,9 +35,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+//The size of the string in to be tested.
+#define PALINSIZE 64
+//The max file name length.
+#define FILENAMESIZE 64
+
+//Help function definition.
 int help(char*);
 
-//Volatile flag so that compiler knows to check
+//done_flag lets master know when either the
+//timer is up or ctrl-c has been invoked.
+//Volatile so that compiler knows to check
 //every time rather than optimize. sig_atomic_t to ensure
 //it only gets changed by one thing at a time.
 static volatile sig_atomic_t done_flag = 0;
@@ -46,13 +57,14 @@ static int setdoneflag(int s)
     return 0;
 }
 
-//Set the signal handler for the interrupt.
+//Set the signal handler to listen to the timer
+//and ctrl-c.
 static int setupinterrupt()
 {
     struct sigaction act;
     act.sa_handler = setdoneflag;
     act.sa_flags = 0;
-    return (sigemptyset(&act.sa_mask) || sigaction(SIGPROF, &act, NULL));
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGPROF, &act, NULL) || sigaction(SIGINT, &act, NULL));
 }
 
 //Set up the interrupt timer for the time specified.
@@ -69,16 +81,27 @@ static int setuptimer(int time)
     return (setitimer(ITIMER_PROF, &value, NULL));
 }
 
+//state is used to solve the critical section
+//problem. In the context of this code, it is
+//only used to generate a size for the array
+//in shared memory.
+enum state {idle, want_in, in_cs};
+
 //*****************************************************
-//MAIN
+///////////////////////MAIN////////////////////////////
 //*****************************************************
 int main(int argc, char *argv[])
 {
+    //Number of children this process will ever create.
     int max_lifetime_children = 4;
+    //Number of children in system at a given time.
     int max_concurrent_children = 2;
+    //The number of seconds this program is allowed to run.
+    //Cannot be greater than 1000.
     int max_run_time = 100;
+    //File info.
     FILE *fp = NULL;
-    char file[51];
+    char file[FILENAMESIZE];
 
 //*****************************************************
 //BEGIN: Command line processing.
@@ -128,19 +151,14 @@ int main(int argc, char *argv[])
     //if true, there is an additional nonoption argument.
     if ( optind < argc ) {
         //copy it to file as the file name to work with.
-        strncpy(file, argv[optind], 50);
+        strncpy(file, argv[optind], FILENAMESIZE-1);
     } else {
         fprintf(stderr, "%s: Error: There must be a file name.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
+    //Open the file.
     fp = fopen(file, "r");
-    
-    //Test prints.
-    printf("s: %d\n", max_concurrent_children);
-    printf("n: %d\n", max_lifetime_children);
-    printf("t: %d\n", max_run_time);
-    printf("file: %s\n", file);
 
 //END: Command line processing.
 //*****************************************************
@@ -162,7 +180,7 @@ int main(int argc, char *argv[])
 
     key_t key;
     int shmid;
-    int *shmp;
+    enum state *shmp;
 
     //Generate key deterministically so that children
     //can do the same and attach to shared memory.
@@ -170,37 +188,52 @@ int main(int argc, char *argv[])
         fprintf(stderr, "%s: Error: ftok() failed to generated key.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
+    
+    //Calculate the size of shared memory.
+    //The first slot is whos turn it is for
+    //accessing the file.
+    //The rest is an array of states for all
+    //children.
+    int shm_size = sizeof(enum state) * (max_lifetime_children + 1);
 
     //Create and get the id of the shared memory segment.
-    if ( (shmid = shmget(key, sizeof(int), IPC_CREAT|0666)) < 0 ) {
+    if ( (shmid = shmget(key, shm_size, IPC_CREAT|0666)) < 0 ) {
         fprintf(stderr, "%s: Error: Failed to allocate shared memory.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
     //Attach to shared memory.
-    if ( (shmp = (int*)shmat(shmid, NULL, 0)) < 0 ) {
+    if ( (shmp = (enum state*)shmat(shmid, NULL, 0)) < 0 ) {
         fprintf(stderr, "%s: Error: Failed to attach to shared memory.\n%s\n", argv[0], strerror(errno));
         return 1;
     }
 
-    //test assignment.
-    *shmp = 5;
-    //test print.
-    printf("shmp: %d\n", *shmp);
+    //Initialize turn to the first child.
+    *shmp = 1;
+    //Initialize every child's state to idle.
+    int i;
+    for ( i = 1; i <= max_lifetime_children; i++) {
+        *(shmp+i) = idle;
+    }
 
 //END: Setting up shared memory.
 //*****************************************************
 //BEGIN: Creating children.
 
+    //Array containing pids of all children.
+    //Used for killing them after interrupt.
     pid_t childpid[max_lifetime_children];
+    //The number of children at a given time.
     int child_count = 0;
+    //The number of children created so far.
     int child_count_total = 0;
-    int there_is_input = 1;
+    //The logical id given to a child.
+    int child_id = 1;
+    //A buffer to hold strings read from file.
     char buffer[64];
-    char *arg_vector[] = {"./palin", "helloolleh", NULL};
 
     do {
-        //If the timer is up, break.
+        //If an interrupt occured, break.
         if ( done_flag ) {
             break;
         }
@@ -208,21 +241,36 @@ int main(int argc, char *argv[])
         //If there are less children right now than the
         //simultaneous max,
         if ( child_count < max_concurrent_children ) {
-            if ( fgets(buffer, 63, fp) != NULL ) {        
+            //Read a string from file.
+            if ( fgets(buffer, PALINSIZE-1, fp) != NULL ) {        
                 //Create a child.
                 if ( (childpid[child_count_total] = fork()) < 0 ) {
                     fprintf(stderr, "%s: Error: fork() failed to create child.\n%s\n", argv[0], strerror(errno));
                     return 1;
                 } else if ( childpid[child_count_total] == 0 ) {
+                    //Inside child,
+                    //Build the argv.
+                    char arg1[PALINSIZE];
+                    char arg2[16];
+                    char arg3[16];
+                    sscanf(buffer, "%s", arg1);
+                    sprintf(arg2, "%d", max_lifetime_children);
+                    sprintf(arg3, "%d", child_id);
+                    char *arg_vector[] = {"./palin", arg1, arg2, arg3, NULL};
+                    //exec.
                     execv(arg_vector[0], arg_vector);
                 } else {
-                    //increment the current count.
+                    //Inside parent,
+                    //increment the simultaneous child count.
                     child_count++;
-                    //increment the total count.
+                    //increment the total child count.
                     child_count_total++;
+                    //increment the logical child_id.
+                    child_id++;
                 }
             } else {
-                there_is_input = 0;
+                //There was nothing read from file.
+                break;
             }
         }
 
@@ -231,17 +279,14 @@ int main(int argc, char *argv[])
             child_count--;
         }
 
-    } while ( there_is_input && (child_count_total < max_lifetime_children) );
+    } while ( (child_count_total < max_lifetime_children) );
 
 //END: Creating children.
 //*****************************************************
 //BEGIN: Finishing up.
 
-    //printf("done: %d\n", done_flag);
-
-    //If the done flag was set, kill the children.
+    //If an interrupt occured, kill the children.
     if ( done_flag ) {
-        int i;
         for ( i = 0; i < child_count_total; i++ ) {
             kill(childpid[i], SIGINT);
         }
