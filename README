@@ -1,0 +1,64 @@
+NAME:       master
+
+DESCRIPTION:
+            master sorts a file of strings into two files.
+            If a string is a palindrome it is placed in
+            palin.out. If the string is not, it is placed
+            in nopalin.out.
+
+            To accomplish this efficiently master assigns
+            a child process, palin, to each string for 
+            concurrent processing.
+
+            Each child needs to write to the same files so
+            the critical section problem is solved using
+            Peterson's multiple process solution.
+
+FILES: master.c palin.c
+
+TO COMPILE:
+            OPTION ONE: Use supplied makefile. 
+                Type: make.
+            OPTION TWO: Use gcc compiler.
+                Type: gcc -Wall -g master.c -o master
+                Type: gcc -Wall -g palin.c -o palin
+
+TO RUN:
+            ./master [-n x] [-s y] [-t z] input_file
+            OR
+            ./master -h
+
+            Where:
+
+                [] denotes optional argument
+
+                x is the max number of children master will ever create.
+                    (i.e. the number of strings it will process)
+
+                y is the max number of children running at a given time.
+
+                z is the time in seconds that the entire process
+                    has to complete the operation.
+
+                input_file is a nonoptional file of strings to be processed.
+                    one string per line.
+
+                -h displays a help message. 
+            
+VERSION CONTROL:
+            This project uses git and github to keep track of versions.
+
+            To see the list of commits, Type: git log
+
+NOTES:
+            * I did not pass strings to children via shared memory.
+                I decided not to do this because it was very simple
+                to pass the strings one by one to children via
+                command line argument as they were read from the file. 
+                Instead I used shared memory to hold an array of child 
+                states to solve the critical section problem.
+ 
+            * I did not use perror in this assignment because it 
+                limits the formatting of error output. Instead I used
+                fprintf to stderr and included errno with my own custom message.
+
