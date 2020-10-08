@@ -51,11 +51,10 @@ int help(char*);
 static volatile sig_atomic_t done_flag = 0;
 
 //Sets a flag to indicate when program should exit gracefully.
-static int setdoneflag(int s)
+static void setdoneflag(int s)
 {
     fprintf(stderr, "\nInterrupt Received.\n");
     done_flag = 1;
-    return 0;
 }
 
 //Set the signal handler to listen to the timer
