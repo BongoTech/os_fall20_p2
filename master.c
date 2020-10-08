@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
     //The logical id given to a child.
     int child_id = 1;
     //A buffer to hold strings read from file.
-    char buffer[64];
+    char buffer[PALINSIZE];
 
     do {
         //If an interrupt occured, break.
