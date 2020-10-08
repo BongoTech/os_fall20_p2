@@ -32,6 +32,9 @@
 #include <time.h>
 #include <unistd.h>
 
+//The size of a string to be tested.
+#define PALINSIZE 64
+
 //Function returns 1 (true) if argument is palindrome,
 //0 (false) otherwise.
 int is_palindrome(char*);
@@ -205,7 +208,7 @@ int strrev(char *str)
     while (str[length] != '\0')
         length++;
 
-    char temp[50];
+    char temp[PALINSIZE];
 
     //Construct reverse string in temp.
     int i, j = 0;
@@ -225,15 +228,15 @@ int strrev(char *str)
 int is_palindrome(char *str)
 {
     //Make a copy of str in temp.
-    char temp[50];
-    strncpy(temp, str, 49);
+    char temp[PALINSIZE];
+    strncpy(temp, str, PALINSIZE-1);
     
     //Reverse temp.
     strrev(temp);
 
     //If the standard and reversed versions are
     //the same, it is a palindrome.
-    if (strncmp(temp, str, 49) == 0) {
+    if (strncmp(temp, str, PALINSIZE-1) == 0) {
         return 1;
     } else {
         return 0;
