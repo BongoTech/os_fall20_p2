@@ -112,10 +112,11 @@ int main(int argc, char *argv[])
             if (*(shmp + j) != idle) {
                 j = *shmp;
             } else {
-                if ( (j + 1) > num_children )
+                if ( (j + 1) > num_children ) {
                     j = 1;
-                else
+                } else {
                     j = j + 1;
+                }
             }
         }
 
@@ -124,7 +125,7 @@ int main(int argc, char *argv[])
 
         //Check no one else is in the critical section.
         for (j = 1; j <= num_children; j++)
-            if ( (j != child_id) && (*(shmp + j) != idle) )
+            if ( (j != child_id) && (*(shmp + j) == in_cs) )
                 break;
     } while ( (j <= num_children) || ( *shmp != child_id && *(shmp + *shmp) != idle ) );
 
